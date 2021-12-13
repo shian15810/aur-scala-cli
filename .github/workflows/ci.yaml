@@ -7,14 +7,12 @@ on:
   pull_request:
     branches:
       - main
-  release:
-    types:
-      - published
 
   workflow_dispatch:
 
 jobs:
   build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,19 +25,18 @@ jobs:
           target: pkgbuild
           pkgname: scala-cli
 
-      - name: Validate binary
+      - name: Validate .SRCINFO
+        uses: 2m/arch-pkgbuild-builder@v1.18
+        with:
+          target: srcinfo
+          pkgname: scala-cli
+
+      - name: Test binary
         uses: 2m/arch-pkgbuild-builder@v1.18
         with:
           target: run
           pkgname: scala-cli
-          command: scala-cli --help
-
-      - name: Publish AUR package
-        if: github.event_name == 'release' && github.event.action == 'published'
-        uses: KSXGitHub/github-actions-deploy-aur@v2.2.5
-        with:
-          pkgname: scala-cli
-          pkgbuild: scala-cli/PKGBUILD
-          commit_username: ${{ secrets.AUR_USERNAME }}
-          commit_email: ${{ secrets.AUR_EMAIL }}
-          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          command: |
+            scala-cli --help
+            echo -e 'object Hello {\n  def main(args: Array[String]): Unit = println("Hello from Scala")\n}' >Hello.scala
+            [[ $(scala-cli Hello.scala) == 'Hello from Scala' ]] && exit 0 || exit 1
