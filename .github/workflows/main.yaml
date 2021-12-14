@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  release:
+    types:
+      - published
+
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Run publish?
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Lint codebase
+        uses: github/super-linter@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Validate PKGBUILD
+        uses: 2m/arch-pkgbuild-builder@v1.18
+        with:
+          target: pkgbuild
+          pkgname: scala-cli
+
+      - name: Validate .SRCINFO
+        uses: 2m/arch-pkgbuild-builder@v1.18
+        with:
+          target: srcinfo
+          pkgname: scala-cli
+
+      - name: Test binary run
+        uses: 2m/arch-pkgbuild-builder@v1.18
+        with:
+          target: run
+          pkgname: scala-cli
+          command: |
+            scala-cli --help
+            echo -e 'object Hello {\n  def main(args: Array[String]): Unit = println("Hello from Scala")\n}' >Hello.scala
+            [[ $(scala-cli Hello.scala) == 'Hello from Scala' ]] && exit 0 || exit 1
+
+  publish:
+    needs:
+      - lint
+      - test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Publish package to AUR
+        if: |
+          (github.event_name == 'release' && github.event.action == 'published') ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish)
+        uses: KSXGitHub/github-actions-deploy-aur@v2.2.5
+        with:
+          pkgname: scala-cli
+          pkgbuild: scala-cli/PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
